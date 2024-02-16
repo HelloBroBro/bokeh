@@ -1,8 +1,9 @@
 import {Annotation, AnnotationView} from "./annotation"
 import {Title} from "./title"
 import {CartesianFrame} from "../canvas/cartesian_frame"
-import type {Axis} from "../axes"
-import {LinearAxis} from "../axes"
+import type {Axis} from "../axes/axis"
+import {LabelOverrides} from "../axes/axis"
+import {LinearAxis} from "../axes/linear_axis"
 import {Ticker} from "../tickers/ticker"
 import {BasicTicker} from "../tickers"
 import {TickFormatter} from "../formatters/tick_formatter"
@@ -22,7 +23,7 @@ import type {Layoutable, SizingPolicy, Percent} from "core/layout"
 import {Grid} from "core/layout"
 import {HStack, VStack, NodeLayout} from "core/layout/alignments"
 import {BorderLayout} from "core/layout/border"
-import {Panel} from "core/layout/side_panel"
+import {SidePanel} from "core/layout/side_panel"
 import type {IterViews} from "core/build_views"
 import {build_view} from "core/build_views"
 import {BBox} from "core/util/bbox"
@@ -394,11 +395,11 @@ export abstract class BaseColorBarView extends AnnotationView {
 
     const {_title_view} = this
     if (orientation == "horizontal") {
-      _title_view.panel = new Panel("above")
+      _title_view.panel = new SidePanel("above")
       _title_view.update_layout()
       top_panel.children.push(_title_view.layout)
     } else {
-      _title_view.panel = new Panel("left")
+      _title_view.panel = new SidePanel("left")
       _title_view.update_layout()
       left_panel.children.push(_title_view.layout)
     }
@@ -425,7 +426,7 @@ export abstract class BaseColorBarView extends AnnotationView {
     })()
 
     const {_axis_view} = this
-    _axis_view.panel = new Panel(side)
+    _axis_view.panel = new SidePanel(side)
     _axis_view.update_layout()
     if (_axis_view.layout != null)
       stack.children.push(_axis_view.layout)
@@ -531,7 +532,7 @@ export namespace BaseColorBar {
     scale_alpha: p.Property<number>
     ticker: p.Property<Ticker | "auto">
     formatter: p.Property<TickFormatter | "auto">
-    major_label_overrides: p.Property<Map<string | number, string | BaseText>>
+    major_label_overrides: p.Property<LabelOverrides>
     major_label_policy: p.Property<LabelingPolicy>
     label_standoff: p.Property<number>
     margin: p.Property<number>
@@ -583,7 +584,7 @@ export class BaseColorBar extends Annotation {
       ["background_",  mixins.Fill],
     ])
 
-    this.define<BaseColorBar.Props>(({Alpha, Number, String, Tuple, Map, Or, Ref, Auto, Nullable}) => ({
+    this.define<BaseColorBar.Props>(({Alpha, Number, String, Tuple, Or, Ref, Auto, Nullable}) => ({
       location:              [ Or(Anchor, Tuple(Number, Number)), "top_right" ],
       orientation:           [ Or(Orientation, Auto), "auto" ],
       title:                 [ Nullable(Or(String, Ref(BaseText))), null ],
@@ -593,7 +594,7 @@ export class BaseColorBar extends Annotation {
       scale_alpha:           [ Alpha, 1.0 ],
       ticker:                [ Or(Ref(Ticker), Auto), "auto" ],
       formatter:             [ Or(Ref(TickFormatter), Auto), "auto" ],
-      major_label_overrides: [ Map(Or(String, Number), Or(String, Ref(BaseText))), new globalThis.Map() ],
+      major_label_overrides: [ LabelOverrides, new Map() ],
       major_label_policy:    [ Ref(LabelingPolicy), () => new NoOverlap() ],
       label_standoff:        [ Number, 5 ],
       margin:                [ Number, 30 ],

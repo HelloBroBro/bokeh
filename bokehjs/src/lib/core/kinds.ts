@@ -1,7 +1,7 @@
 import type * as types from "./types"
 import * as tp from "./util/types"
 import {is_Color} from "./util/color"
-import {keys, values, typed_values, typed_entries, PlainObjectProxy} from "./util/object"
+import {keys, values, typed_values, typed_entries, is_empty, PlainObjectProxy} from "./util/object"
 import {has_refs} from "./util/refs"
 
 type ESMap<K, V> = globalThis.Map<K, V>
@@ -12,8 +12,13 @@ const ESSet = globalThis.Set
 
 type ESIterable<V> = globalThis.Iterable<V>
 
+type DOMNode = globalThis.Node
+const DOMNode = globalThis.Node
+
 export abstract class Kind<T> {
   __type__: T
+
+  coerce?(value: unknown): unknown
 
   abstract valid(value: unknown): value is this["__type__"]
 
@@ -57,13 +62,13 @@ export namespace Kinds {
     }
   }
 
-  export class Boolean extends Primitive<boolean> {
+  export class Bool extends Primitive<boolean> {
     valid(value: unknown): value is boolean {
       return tp.isBoolean(value)
     }
 
     override toString(): string {
-      return "Boolean"
+      return "Bool"
     }
   }
 
@@ -103,17 +108,17 @@ export namespace Kinds {
     }
   }
 
-  export class Number extends Primitive<number> {
+  export class Float extends Primitive<number> {
     valid(value: unknown): value is number {
       return tp.isNumber(value)
     }
 
     override toString(): string {
-      return "Number"
+      return "Float"
     }
   }
 
-  export class Int extends Number {
+  export class Int extends Float {
     override valid(value: unknown): value is number {
       return super.valid(value) && tp.isInteger(value)
     }
@@ -123,7 +128,7 @@ export namespace Kinds {
     }
   }
 
-  export class Percent extends Number {
+  export class Percent extends Float {
     override valid(value: unknown): value is number {
       return super.valid(value) && 0 <= value && value <= 1
     }
@@ -304,7 +309,7 @@ export namespace Kinds {
     }
   }
 
-  export class Array<ItemType> extends Kind<ItemType[]> {
+  export class List<ItemType> extends Kind<ItemType[]> {
     constructor(readonly item_type: Kind<ItemType>) {
       super()
     }
@@ -314,7 +319,7 @@ export namespace Kinds {
     }
 
     override toString(): string {
-      return `Array(${this.item_type.toString()})`
+      return `List(${this.item_type.toString()})`
     }
 
     may_have_refs(): boolean {
@@ -382,17 +387,17 @@ export namespace Kinds {
     }
   }
 
-  export class String extends Primitive<string> {
+  export class Str extends Primitive<string> {
     valid(value: unknown): value is string {
       return tp.isString(value)
     }
 
     override toString(): string {
-      return "String"
+      return "Str"
     }
   }
 
-  export class Regex extends String {
+  export class Regex extends Str {
     constructor(readonly regex: RegExp) {
       super()
     }
@@ -456,15 +461,25 @@ export namespace Kinds {
     }
   }
 
-  export class Map<KeyType, ItemType> extends Kind<ESMap<KeyType, ItemType>> {
+  export class Mapping<KeyType, ItemType> extends Kind<ESMap<KeyType, ItemType>> {
 
     constructor(readonly key_type: Kind<KeyType>, readonly item_type: Kind<ItemType>) {
       super()
     }
 
+    override coerce(value: unknown): unknown {
+      // HACK accommodate for deserialization of {type: "map"}
+      if (tp.isPlainObject(value) && is_empty(value)) {
+        return new ESMap()
+      } else {
+        return value
+      }
+    }
+
     valid(value: unknown): value is this["__type__"] {
-      if (!(value instanceof ESMap))
+      if (!(value instanceof ESMap)) {
         return false
+      }
 
       for (const [key, item] of value.entries()) {
         if (!(this.key_type.valid(key) && this.item_type.valid(item)))
@@ -475,7 +490,7 @@ export namespace Kinds {
     }
 
     override toString(): string {
-      return `Map(${this.key_type.toString()}, ${this.item_type.toString()})`
+      return `Mapping(${this.key_type.toString()}, ${this.item_type.toString()})`
     }
 
     may_have_refs(): boolean {
@@ -524,7 +539,7 @@ export namespace Kinds {
     }
   }
 
-  export class CSSLength extends String {
+  export class CSSLength extends Str {
     /*
     override valid(value: unknown): value is string {
       return super.valid(value) // TODO: && this._parse(value)
@@ -536,13 +551,13 @@ export namespace Kinds {
     }
   }
 
-  export class Function<Args extends unknown[], Ret> extends Kind<(...args: Args) => Ret> {
+  export class Func<Args extends unknown[], Ret> extends Kind<(...args: Args) => Ret> {
     valid(value: unknown): value is this["__type__"] {
       return tp.isFunction(value)
     }
 
     override toString(): string {
-      return "Function(...)"
+      return "Func(...)"
     }
 
     may_have_refs(): boolean {
@@ -586,13 +601,13 @@ export namespace Kinds {
     }
   }
 
-  export class DOMNode extends Kind<Node> {
-    valid(value: unknown): value is Node {
-      return value instanceof Node
+  export class Node extends Kind<DOMNode> {
+    valid(value: unknown): value is DOMNode {
+      return value instanceof DOMNode
     }
 
     override toString(): string {
-      return "DOMNode"
+      return "Node"
     }
 
     may_have_refs(): boolean {
@@ -603,11 +618,11 @@ export namespace Kinds {
 
 export const Any = new Kinds.Any()
 export const Unknown = new Kinds.Unknown()
-export const Boolean = new Kinds.Boolean()
-export const Number = new Kinds.Number()
+export const Bool = new Kinds.Bool()
+export const Float = new Kinds.Float()
 export const Int = new Kinds.Int()
 export const Bytes = new Kinds.Bytes()
-export const String = new Kinds.String()
+export const Str = new Kinds.Str()
 export const Regex = (regex: RegExp) => new Kinds.Regex(regex)
 export const Null = new Kinds.Null()
 export const Nullable = <BaseType>(base_type: Kind<BaseType>) => new Kinds.Nullable(base_type)
@@ -618,15 +633,15 @@ export const Struct = <T extends {[key: string]: unknown}>(struct_type: Kinds.Ob
 export const PartialStruct = <T extends {[key: string]: unknown}>(struct_type: Kinds.ObjectKind<T>) => new Kinds.PartialStruct(struct_type)
 export const Iterable = <ItemType>(item_type: Kind<ItemType>) => new Kinds.Iterable(item_type)
 export const Arrayable = <ItemType>(item_type: Kind<ItemType>) => new Kinds.Arrayable(item_type)
-export const Array = <ItemType>(item_type: Kind<ItemType>) => new Kinds.Array(item_type)
+export const List = <ItemType>(item_type: Kind<ItemType>) => new Kinds.List(item_type)
 export const Dict = <V>(item_type: Kind<V>) => new Kinds.Dict(item_type)
-export const Map = <K, V>(key_type: Kind<K>, item_type: Kind<V>) => new Kinds.Map(key_type, item_type)
+export const Mapping = <K, V>(key_type: Kind<K>, item_type: Kind<V>) => new Kinds.Mapping(key_type, item_type)
 export const Set = <V>(item_type: Kind<V>) => new Kinds.Set(item_type)
 export const Enum = <T extends string | number>(...values: T[]) => new Kinds.Enum(values)
 export const Ref = <ObjType extends object>(obj_type: Constructor<ObjType>) => new Kinds.Ref<ObjType>(obj_type)
 export const AnyRef = <ObjType extends object>() => new Kinds.AnyRef<ObjType>()
-export const Function = <Args extends unknown[], Ret>() => new Kinds.Function<Args, Ret>()
-export const DOMNode = new Kinds.DOMNode()
+export const Func = <Args extends unknown[], Ret>() => new Kinds.Func<Args, Ret>()
+export const Node = new Kinds.Node()
 
 export const NonNegative = <BaseType extends number>(base_type: Kind<BaseType>) => new Kinds.NonNegative(base_type)
 export const Positive = <BaseType extends number>(base_type: Kind<BaseType>) => new Kinds.Positive(base_type)
@@ -637,7 +652,15 @@ export const Color = new Kinds.Color()
 export const Auto = Enum("auto")
 export const CSSLength = new Kinds.CSSLength()
 
-export const FontSize = String
-export const Font = String
-export const Angle = Number
-export const Float = Number
+export const FontSize = Str
+export const Font = Str
+export const Angle = Float
+
+// backwards compatibility aliases (these collide with built-in types)
+// TODO deprecate this and update the codebase
+export const Boolean = Bool
+export const String = Str
+export const Number = Float
+export const Array = List
+export const Map = Mapping
+export const Function = Func
