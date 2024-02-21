@@ -143,7 +143,7 @@ def OutputDocumentFor(objs: Sequence[Model], apply_theme: Theme | type[FromCurdo
     docs = {obj.document for obj in objs if obj.document is not None}
 
     if always_new:
-        def finish() -> None:  # noqa
+        def finish() -> None:
             _dispose_temp_doc(objs)
         doc = _create_temp_doc(objs)
     else:
@@ -392,7 +392,7 @@ callbacks (i.e. with on_change or on_event). This combination cannot work.
 Only JavaScript callbacks may be used with standalone output. For more
 information on JavaScript callbacks with Bokeh, see:
 
-    https://docs.bokeh.org/en/latest/docs/user_guide/interaction/callbacks.html
+    https://docs.bokeh.org/en/latest/docs/user_guide/interaction/js_callbacks.html
 
 Alternatively, to use real Python callbacks, a Bokeh server application may
 be used. For more information on building and running Bokeh applications, see:
